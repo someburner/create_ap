@@ -1,3 +1,10 @@
+## Usage
+
+```
+create_ap wlp2s0 wlp2s0 FlumePacket flumegateway
+```
+
+
 ## Features
 * Create an AP (Access Point) at any channel.
 * Choose one of the following encryptions: WPA, WPA2, WPA/WPA2, Open (no encryption).

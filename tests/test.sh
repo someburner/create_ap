@@ -65,9 +65,9 @@ format_drop_iptable_rule () {
 
 
 #########    Delay filter   #########
-DELAY_TYPE=1
-# DELAY_TYPE=2
-# DELAY_TYPE=3
+SIMPLE_DELAY=1
+NORMAL_DIST_DELAY=2
+VARIANCE_DELAY=3
 
 # Delay base for all types
 DELAY_TIME_MS=100
@@ -78,82 +78,69 @@ DELAY_DISTRIBUTION=20
 
 TC_USER=root
 
-format_delay_rule () {
-   local cmd="";
-   local outputtmp="";
-   if [[ "$DELAY_EN" == "yes" ]]; then
-      local IFACE=$1;
-      local PARAM=$2;
-      local TYPE=$3;
-      local cmdswitch="";
-      case $TYPE in
-         "1") echo "basic delay" >&2; cmdswitch="$DELAY_TIME_MS"; cmdswitch+="ms";
-         ;;
-         "2") echo "variance delay" >&2; cmdswitch="$DELAY_TIME_MS"; cmdswitch+="ms";
-         ;;
-         "3") echo "normal dist delay" >&2; cmdswitch="$DELAY_TIME_MS"; cmdswitch+="ms";
-         ;;
-         *) echo "Invalid or wrong arg!">&2; echo "Call with '1' for debug or '2' for release." >&2;
-         echo '';
-         ;;
-      esac
-      cmd=(tc qdisc "$PARAM" dev "$IFACE" "$TC_USER" netem delay $cmdswitch);
-   fi
-   outputtmp="${cmd[@]}";
-   echo $outputtmp
+set_delay_rules() {
+   local IFACE=$1;
+   local TYPE=$2;
+   local PARAM_DBG='';
+   local ADD_DELAY_CMD='';
+   case "$TYPE" in
+      "1") echo "basic delay" >&2;
+         local DELAY1=$3;
+         PARAM_DBG+="Delay=$DELAY1";
+         ADD_DELAY_CMD=(tcset --device $IFACE --delay $DELAY1)
+      ;;
+      "2") echo "normal dist delay" >&2;
+         local DELAY1=$3;
+         local DELAY_DIST=$4;
+         PARAM_DBG+="Delay=$DELAY1";
+         PARAM_DBG+="Delay dist=$DELAY_DIST";
+         ADD_DELAY_CMD=(tcset --device $IFACE --delay $DELAY1 $DELAY_DIST)
+      ;;
+      "3") echo "variance delay" >&2;
+         local DELAY1=$3;
+         local DELAY_DIST=$4;
+         local DELAY_PCT=$5;
+         PARAM_DBG+="Delay=$DELAY1";
+         PARAM_DBG+="Delay dist=$DELAY_DIST";
+         PARAM_DBG+="Delay pct=$DELAY_PCT %";
+         ADD_DELAY_CMD=(tcset --device $IFACE --delay $DELAY1 $DELAY_DIST $DELAY_PCT)
+      ;;
+      *) echo "Invalid or wrong arg!">&2;
+         return;
+      ;;
+   esac
+   printf "Adding rule: $TYPE to if $IFACE and params:\n$PARAM_DBG";
+   printf "\n${ADD_DELAY_CMD[@]}\n" >&2;
+   ${ADD_DELAY_CMD[@]};
+}
+
+clear_delay_rules() {
+   local IFACE=$1;
+   echo 'clear_delay_rules...';
+   DEL_DELAY_CMD=(tcdel --device $IFACE)
+   printf "\n${DEL_DELAY_CMD[@]}\n" >&2;
+   ${DEL_DELAY_CMD[@]};
 }
 
 WIFI_IFACE=ap0
 
-
-clear_delay_rules() {
-   local IFACE=$1;
-   local TYPE=$2;
-   local DEL_DELAY_CMD='';
-   LIST_DELAY_CMD=$(eval 'tc -p qdisc ls dev $IFACE')
-   if [[ "$LIST_DELAY_CMD" != "" ]]; then
-      DEL_DELAY_CMD=$(format_delay_rule "$IFACE" "$DELARG" "$TYPE")
-      echo "$LIST_DELAY_CMD - exists!";
-      echo 'Deleting...';
-      ${DEL_DELAY_CMD[@]};
-   else
-      echo 'DNE';
-   fi
-}
-
-# clear_delay_rules "$WIFI_IFACE" "$DELAY_TYPE";
-# exit 0
-
-add_delay_rule() {
-   local IFACE=$1;
-   local TYPE=$2;
-   LIST_DELAY_CMD=$(eval 'tc -p qdisc ls dev $IFACE')
-   if [[ "$LIST_DELAY_CMD" == "" ]]; then
-      ADD_DELAY_CMD=$(format_delay_rule "$IFACE" "$ADDARG" "$TYPE")
-      ${ADD_DELAY_CMD[@]};
-      printf "${DEL_DELAY_CMD[@]}\n";
-   else
-      printf "Delay already set!\n";
-   fi
-}
-
-add_delay_rule "$WIFI_IFACE" "$DELAY_TYPE"
+clear_delay_rules "$WIFI_IFACE"
+res=$?
+printf "\n--------clear_delay_rules--------\n";
+echo "result = $res";
+printf "\n---------------------------------\n";
 
 
-# ADD_DELAY_CMD=$(format_delay_rule "$WIFI_IFACE" "$ADDARG")
-# DEL_DELAY_CMD=$(format_delay_rule "$WIFI_IFACE" "$DELARG")
+set_delay_rules "$WIFI_IFACE" "$SIMPLE_DELAY" "100"
 
-# echo "DELAY_LIST_CMD == $DELAY_LIST_CMD"
-# if [[ "$LIST_DELAY_CMD" != "" ]]; then
-#    echo 'exists!';
-#    ${DEL_DELAY_CMD[@]};
-# else
-#    echo 'DNE!';
-#    ${ADD_DELAY_CMD[@]};
-#    printf "${DEL_DELAY_CMD[@]}\n";
-# fi
+
+res=$?
+printf "\n---------set_delay_rules---------\n";
+echo "result = $res";
+printf "\n---------------------------------\n";
 
 exit 0;
+
 
 # tc qdisc add dev ap0 root netem delay 100ms              ## simple   (1)   100ms delay
 # tc qdisc change dev eth0 root netem delay 100ms 10ms 25% ## moderate (2) 100 ± 10ms

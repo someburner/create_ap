@@ -7,6 +7,11 @@ create_ap wlp2s0 wlp2s0 FlumePacket flumegateway
 iw dev apX del
 ```
 
+## References
+
+ * [linux-viewing-all-iptables-rules-with-numbers-command](https://www.cyberciti.biz/faq/linux-viewing-all-iptables-rules-with-numbers-command/)
+ * [ip forwarding](https://jamielinux.com/docs/libvirt-networking-handbook/appendix/example-of-iptables-nat-with-connection-forwarding.html)
+
 
 ## Features
 * Create an AP (Access Point) at any channel.

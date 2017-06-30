@@ -1,33 +1,129 @@
 #!/bin/bash
 
-# general dependencies:
-#    bash (to run this script)
-#    util-linux (for getopt)
-#    procps or procps-ng
-#    hostapd
-#    iproute2
-#    iw
-#    iwconfig (you only need this if 'iw' can not recognize your adapter)
-#    haveged (optional)
-
-# dependencies for 'nat' or 'none' Internet sharing method
-#    dnsmasq
-#    iptables
-
 VERSION=0.4.6
 PROGNAME="$(basename $0)"
 
-#########   % DROP filter   #########
-DROP_OUTBOUND_EN=yes
-# DROP_OUTBOUND_EN=no
-DROP_OUTBOUND_PCT=0.25
+
+######  iptable Option Flags  #######
+DASH_APPEND="-A"
+DASH_DELETE="-D"
+DASH_INSERT="-I"
+
+ADDARG="add"
+DELARG="del"
+#####################################
+
+#########  iptable routing  #########
 DROP_DEST_IPMASK="45.32.67.0/24"
 DROP_DEST_PORT=1883
+DELAY_DEST_IPMASK="45.32.67.0/24"
+DELAY_DEST_PORT=1883
+#####################################
+
+######  iptable filter en/dis  ######
+# DROP_OUTBOUND_EN=yes
+DROP_OUTBOUND_EN=no
+
+DELAY_EN=yes
+# DELAY_EN=no
+#####################################
+
+
+#######   Pct. DROP filter   ########
+DROP_OUTBOUND_PCT=0.25
+
+# $1 = WIFI_IFACE; $2 drop (-D)/add (-I)
+format_drop_iptable_rule () {
+   local cmd="";
+   local outputtmp="";
+   if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
+      local IFACE=$1;
+      local PARAM=$2;
+      cmd=(iptables -w "$PARAM" FORWARD -i ${IFACE} -d $DROP_DEST_IPMASK -p tcp --dport $DROP_DEST_PORT -m statistic --mode random --probability $DROP_OUTBOUND_PCT -j DROP);
+   fi
+   outputtmp="${cmd[@]}";
+   echo $outputtmp
+}
+# ADD_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_INSERT")  # Insert
+# RM_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_DELETE")   # Delete
 #####################################
 
 #########    Delay filter   #########
-DELAY_EN=yes
-DELAY_TIME_MS=3
+DELAY_TYPE=1
+# DELAY_TYPE=2
+# DELAY_TYPE=3
+
+TC_USER=root
+
+# Delay base for all types (for type 1 its the only setting)
+DELAY_TIME_MS=100
+# Delay variance for type 2
+DELAY_VAR_PCT=25
+# Delay normal dist for type 3
+DELAY_DISTRIBUTION=20
+
+format_delay_rule () {
+   local cmd="";
+   local outputtmp="";
+   if [[ "$DELAY_EN" == "yes" ]]; then
+      local IFACE=$1;
+      local PARAM=$2;
+      local TYPE=$3;
+      local cmdswitch="";
+      case $TYPE in
+         "1") echo "basic delay" >&2; cmdswitch="$DELAY_TIME_MS"; cmdswitch+="ms";
+         ;;
+         "2") echo "variance delay" >&2; cmdswitch="$DELAY_TIME_MS"; cmdswitch+="ms";
+         ;;
+         "3") echo "normal dist delay" >&2; cmdswitch="$DELAY_TIME_MS"; cmdswitch+="ms";
+         ;;
+         *) echo "Invalid or wrong arg!">&2; echo "Call with '1' for debug or '2' for release." >&2;
+         echo '';
+         ;;
+      esac
+      cmd=(tc qdisc "$PARAM" dev "$IFACE" "$TC_USER" netem delay $cmdswitch);
+   fi
+   outputtmp="${cmd[@]}";
+   echo $outputtmp
+}
+
+clear_delay_rules() {
+   local IFACE=$1;
+   local TYPE=$2;
+   local DEL_DELAY_CMD='';
+   LIST_DELAY_CMD=$(eval 'tc -p qdisc ls dev $IFACE')
+   if [[ "$LIST_DELAY_CMD" != "" ]]; then
+      DEL_DELAY_CMD=$(format_delay_rule "$IFACE" "$DELARG" "$TYPE")
+      echo "$LIST_DELAY_CMD - exists!";
+      echo 'Deleting...';
+      ${DEL_DELAY_CMD[@]};
+   else
+      echo 'DNE';
+   fi
+}
+
+add_delay_rule() {
+   local IFACE=$1;
+   local TYPE=$2;
+   LIST_DELAY_CMD=$(eval 'tc -p qdisc ls dev $IFACE')
+   if [[ "$LIST_DELAY_CMD" == "" ]]; then
+      ADD_DELAY_CMD=$(format_delay_rule "$IFACE" "$ADDARG" "$TYPE")
+      ${ADD_DELAY_CMD[@]};
+      printf "${DEL_DELAY_CMD[@]}\n";
+   else
+      printf "Delay already set!\n";
+   fi
+}
+
+# clear_delay_rules "$WIFI_IFACE" "$DELAY_TYPE";
+# add_delay_rule "$WIFI_IFACE" "$DELAY_TYPE"
+#
+#
+# tc qdisc add dev ap0 root netem delay 100ms              ## simple   (1)   100ms delay
+# tc qdisc change dev eth0 root netem delay 100ms 10ms 25% ## moderate (2) 100 ± 10ms
+# tc qdisc change dev eth0 root netem delay 100ms 20ms distribution normal ## (3) advanced
+# tc -p qdisc ls dev ap0    # list rules
+# tc qdisc del dev ap0 root # delete rule
 #####################################
 
 # make sure that all command outputs are in english
@@ -673,15 +769,11 @@ HAVEGED_WATCHDOG_PID=
 
 _clean_custom_iptables() {
    # drop
-   if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-      echo "Removing DROP_OUTBOUND_EN";
-      DROP_OUTBOUND_CMD=( iptables -w -D FORWARD -i ${WIFI_IFACE} -d $DROP_DEST_IPMASK -p tcp --dport $DROP_DEST_PORT -m statistic --mode random --probability $DROP_OUTBOUND_PCT -j DROP )
-      echo "-------------------------------------------------------------------"
-      echo "${DROP_OUTBOUND_CMD[@]}" >&2;
-      echo "-------------------------------------------------------------------"
-      printf "\n\n"
-      ${DROP_OUTBOUND_CMD[@]};
-   fi
+   RM_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_DELETE")
+   echo "${RM_DROP_OUTBOUND_CMD[@]}" >&2;
+   ${RM_DROP_OUTBOUND_CMD[@]};
+
+   clear_delay_rules "$WIFI_IFACE" "$DELAY_TYPE";
 }
 
 _cleanup() {
@@ -1583,7 +1675,9 @@ if [[ $NO_VIRT -eq 0 ]]; then
     if iw dev ${WIFI_IFACE} interface add ${VWIFI_IFACE} type __ap; then
         # now we can call networkmanager_wait_until_unmanaged
         networkmanager_is_running && [[ $NM_OLDER_VERSION -eq 0 ]] && networkmanager_wait_until_unmanaged ${VWIFI_IFACE}
-        echo "${VWIFI_IFACE} created."
+        echo "${VWIFI_IFACE} created." >&2;
+        ${VWIFI_IFACE}
+        echo "Setting ${VWIFI_IFACE} delay to ";
     else
         VWIFI_IFACE=
         die "$VIRTDIEMSG"
@@ -1752,9 +1846,14 @@ if [[ "$SHARE_METHOD" != "none" ]]; then
         iptables -w -t nat -I POSTROUTING -s ${GATEWAY%.*}.0/24 ! -o ${WIFI_IFACE} -j MASQUERADE || die
         iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
         # insert drop
-        if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-            iptables -w -I FORWARD -i ${WIFI_IFACE} -d $DROP_DEST_IPMASK -p tcp --dport $DROP_DEST_PORT -m statistic --mode random --probability $DROP_OUTBOUND_PCT -j DROP || die
-        fi
+        INS_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_INSERT")
+        echo "${INS_DROP_OUTBOUND_CMD[@]}" >&2;
+        ${INS_DROP_OUTBOUND_CMD} || die;
+        # Set delays
+        add_delay_rule "$WIFI_IFACE" "$DELAY_TYPE";
+        # if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
+        #   iptables -w -I FORWARD -i ${WIFI_IFACE} -d $DROP_DEST_IPMASK -p tcp --dport $DROP_DEST_PORT -m statistic --mode random --probability $DROP_OUTBOUND_PCT -j DROP || die
+        # fi
         iptables -w -I FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT || die
         echo 1 > /proc/sys/net/ipv4/conf/$INTERNET_IFACE/forwarding || die
         echo 1 > /proc/sys/net/ipv4/ip_forward || die

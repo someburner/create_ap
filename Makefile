@@ -9,6 +9,9 @@ all:
 # CONF_INIT ?=create_ap
 CONF_INIT ?=create_ap_test
 
+show_nat:
+	iptables -t nat -L --line-numbers -n
+
 install:
 	install -Dm755 create_ap $(DESTDIR)$(BINDIR)/create_ap
 	install -Dm644 create_ap.conf $(DESTDIR)/etc/create_ap.conf

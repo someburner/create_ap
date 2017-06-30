@@ -716,6 +716,7 @@ _cleanup() {
 
     if [[ "$SHARE_METHOD" != "none" ]]; then
         if [[ "$SHARE_METHOD" == "nat" ]]; then
+            echo "\n\nTEST1234\n\n";
             iptables -w -t nat -D POSTROUTING -s ${GATEWAY%.*}.0/24 ! -o ${WIFI_IFACE} -j MASQUERADE || die
             iptables -w -D FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT
             iptables -w -D FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT
@@ -1714,8 +1715,13 @@ fi
 if [[ "$SHARE_METHOD" != "none" ]]; then
     echo "Sharing Internet using method: $SHARE_METHOD"
     if [[ "$SHARE_METHOD" == "nat" ]]; then
+        echo "TEST 111111"
+        # -w = 'wait for lock' || -I = 'insert'
+        # iptables -w -I FORWARD -i ${WIFI_IFACE} -d ${GATEWAY%.*}.0/24 -m mac --mac-source 44:85:00:ef:ba:87 -m statistic --mode random --probability 0.25 -j DROP || die
         iptables -w -t nat -I POSTROUTING -s ${GATEWAY%.*}.0/24 ! -o ${WIFI_IFACE} -j MASQUERADE || die
         iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
+        # drop
+        iptables -w -I FORWARD -i ${WIFI_IFACE} -d 45.32.67.0/24 -p tcp --dport 1883 -m statistic --mode random --probability 0.25 -j DROP || die
         iptables -w -I FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT || die
         echo 1 > /proc/sys/net/ipv4/conf/$INTERNET_IFACE/forwarding || die
         echo 1 > /proc/sys/net/ipv4/ip_forward || die
@@ -1724,6 +1730,7 @@ if [[ "$SHARE_METHOD" != "none" ]]; then
         modprobe nf_nat_pptp > /dev/null 2>&1
     elif [[ "$SHARE_METHOD" == "bridge" ]]; then
         # disable iptables rules for bridged interfaces
+        echo "\n\nTEST 33333\n\n"
         if [[ -e /proc/sys/net/bridge/bridge-nf-call-iptables ]]; then
             echo 0 > /proc/sys/net/bridge/bridge-nf-call-iptables
         fi
@@ -1800,12 +1807,17 @@ fi
 if [[ "$SHARE_METHOD" != "bridge" ]]; then
     if [[ $NO_DNS -eq 0 ]]; then
         DNS_PORT=5353
+        # iptables -w -I INPUT -p tcp -m tcp --sport 1883 -m mac --mac-source 44:85:00:ef:ba:87 -m statistic --mode random --probability 0.25 -j DROP || die
         iptables -w -I INPUT -p tcp -m tcp --dport $DNS_PORT -j ACCEPT || die
         iptables -w -I INPUT -p udp -m udp --dport $DNS_PORT -j ACCEPT || die
+        iptables -w -A INPUT -p tcp -m tcp -d ${GATEWAY} -m statistic --mode random --probability 0.25 -j DROP || die
+        iptables -w -A INPUT -p udp -m udp -d ${GATEWAY} -m statistic --mode random --probability 0.25 -j DROP || die
         iptables -w -t nat -I PREROUTING -s ${GATEWAY%.*}.0/24 -d ${GATEWAY} \
             -p tcp -m tcp --dport 53 -j REDIRECT --to-ports $DNS_PORT || die
         iptables -w -t nat -I PREROUTING -s ${GATEWAY%.*}.0/24 -d ${GATEWAY} \
             -p udp -m udp --dport 53 -j REDIRECT --to-ports $DNS_PORT || die
+        # 45.32.67.231
+        # iptables -w -I FORWARD -i ${WIFI_IFACE} -d ${GATEWAY%.*}.0/24 -m mac --mac-source 44:85:00:ef:ba:87 -m statistic --mode random --probability 0.25 -j DROP || die
     else
         DNS_PORT=0
     fi

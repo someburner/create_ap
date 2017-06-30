@@ -2,6 +2,9 @@
 
 ```
 create_ap wlp2s0 wlp2s0 FlumePacket flumegateway
+
+## Delete runaway
+iw dev apX del
 ```
 
 

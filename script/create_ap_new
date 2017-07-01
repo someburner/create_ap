@@ -5,7 +5,6 @@ PROGNAME="$(basename $0)"
 
 # Must match whatever's in Makefile
 CREATE_AP_INC=/usr/share/create_ap/inc
-#, , , , , , , , , , , , , , , , , ,
 
 if [[ ! -d "$CREATE_AP_INC" ]]; then
    echo "Could not locate create_ap includes.";

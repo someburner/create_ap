@@ -1,3 +1,16 @@
+## Setup
+
+```
+# required
+sudo apt-get install dnsmasq iptables iproute2 util-linux procps hostapd iw iwconfig
+# for packet delay
+sudo pip3 install tcconfig
+
+# optional
+sudo apt-get install haveged
+```
+
+
 ## Usage
 
 ```
@@ -24,36 +37,6 @@ iw dev apX del
 * You can create an AP with the same interface you are getting your Internet connection.
 * You can pass your SSID and password through pipe or through arguments (see examples).
 
-
-## Dependencies
-### General
-* bash (to run this script)
-* util-linux (for getopt)
-* procps or procps-ng
-* hostapd
-* iproute2
-* iw
-* iwconfig (you only need this if 'iw' can not recognize your adapter)
-* haveged (optional)
-
-### For 'NATed' or 'None' Internet sharing method
-* dnsmasq
-* iptables
-
-
-## Installation
-### Generic
-    git clone https://github.com/oblique/create_ap
-    cd create_ap
-    make install
-
-### ArchLinux
-    pacman -S create_ap
-
-### Gentoo
-    emerge layman
-    layman -f -a jorgicio
-    emerge net-wireless/create_ap
 
 ## Examples
 ### No passphrase (open network):

@@ -3,14 +3,9 @@
 VERSION=0.4.6
 PROGNAME="$(basename $0)"
 
-INSTALL_LOC=/usr/share
-INSTALL_DIRNAME=create_ap
-INC_DIRNAME=inc
-
-# /usr/share/create_ap
-CREATE_AP_DIR=$INSTALL_LOC/$INSTALL_DIRNAME
-# /usr/share/create_ap/inc
-CREATE_AP_INC=$CREATE_AP_DIR/$INC_DIRNAME
+# Must match whatever's in Makefile
+CREATE_AP_INC=/usr/share/create_ap/inc
+#, , , , , , , , , , , , , , , , , ,
 
 if [[ ! -d "$CREATE_AP_INC" ]]; then
    echo "Could not locate create_ap includes.";
@@ -44,7 +39,6 @@ RM_WIFI_IF=""
 DELAY_EN=yes
 # DELAY_EN=no
 #####################################
-DROP_INBOUND_EN
 
 #######   Pct. DROP filter   ########
 DROP_OUTBOUND_PCT=0.25
@@ -139,7 +133,10 @@ export LC_ALL=C
 SCRIPT_UMASK=0077
 umask $SCRIPT_UMASK
 
-# source usage()
+# source usage.sh
+# Vars: None
+# Funcs: usage
+echo "sourcing usage.sh..."
 . "$CREATE_AP_INC/usage.sh"
 
 # on success it echos a non-zero unused FD
@@ -159,10 +156,9 @@ get_avail_fd() {
 COUNTER_LOCK_FILE=/tmp/create_ap.$$.lock
 
 # source mutex.sh:
-#   - cleanup_lock()
-#   - init_lock()
-#   - mutex_lock()
-#   - mutex_unlock()
+# Vars: None
+# Funcs: cleanup_lock, init_lock, mutex_lock, mutex_unlock
+echo "sourcing mutex.sh..."
 . "$CREATE_AP_INC/mutex.sh"
 
 
@@ -193,49 +189,27 @@ USE_IWCONFIG=0
 
 # source ifutil.sh:
 # Vars: None
-# Funcs:
-#   - is_interface()
-#   - is_wifi_interface()
-#   - is_bridge_interface()
-#   - get_phy_device()
-#   - get_adapter_info()
-#   - get_adapter_kernel_module()
-#   - can_be_sta_and_ap()
-#   - can_be_ap()
-#   - can_transmit_to_channel()
-#   - ieee80211_frequency_to_channel()
-#   - is_5ghz_frequency()
-#   - is_wifi_connected()
-#   - is_unicast_macaddr()
-#   - get_macaddr()
-#   - get_mtu()
-#   - alloc_new_iface()
-#   - dealloc_iface()
-#   - get_all_macaddrs()
-#   - get_new_macaddr()
-#   - haveged_watchdog()
+# Funcs: is_interface, is_wifi_interface, is_bridge_interface, get_phy_device,
+# get_adapter_info, get_adapter_kernel_module, can_be_sta_and_ap, can_be_ap,
+# can_transmit_to_channel, ieee80211_frequency_to_channel, is_5ghz_frequency,
+# is_wifi_connected, is_unicast_macaddr, get_macaddr, get_mtu, alloc_new_iface,
+# dealloc_iface, get_all_macaddrs, get_new_macaddr, haveged_watchdog
+echo "sourcing ifutil.sh..."
 . "$CREATE_AP_INC/ifutil.sh"
 
-
 # source netman.sh:
-# Vars:
-#   - NETWORKMANAGER_CONF
-#   - NM_OLDER_VERSION
-#   - ADDED_UNMANAGED
-# Funcs:
-#   - networkmanager_exists()
-#   - networkmanager_is_running()
-#   - networkmanager_iface_is_unmanaged()
-#   - networkmanager_add_unmanaged()
-#   - networkmanager_rm_unmanaged()
-#   - networkmanager_fix_unmanaged()
-#   - networkmanager_rm_unmanaged_if_needed()
-#   - networkmanager_wait_until_unmanaged()
+# Vars: NETWORKMANAGER_CONF, NM_OLDER_VERSION, ADDED_UNMANAGED
+# Funcs: networkmanager_exists, networkmanager_is_running,
+# networkmanager_iface_is_unmanaged, networkmanager_add_unmanaged,
+# networkmanager_rm_unmanaged, networkmanager_fix_unmanaged,
+# networkmanager_rm_unmanaged_if_needed, networkmanager_wait_until_unmanaged
+echo "sourcing netman.sh..."
 . "$CREATE_AP_INC/netman.sh"
 
 # source defaults.sh:
 # Vars: A bunch
 # Funcs: None
+echo "sourcing defaults.sh..."
 . "$CREATE_AP_INC/defaults.sh"
 
 
@@ -609,11 +583,9 @@ read_config() {
 }
 
 # source args.sh:
-# Vars:
-#   - ARGS
-#   - GETOPT_ARGS
-# Funcs:
-#  None, but processes args
+# Vars: ARGS, GETOPT_ARGS
+# Funcs: None, but processes args
+echo "sourcing args.sh..."
 . "$CREATE_AP_INC/args.sh"
 
 

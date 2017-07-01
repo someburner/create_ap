@@ -209,3 +209,8 @@ haveged_watchdog() {
       sleep 2
    done
 }
+
+# check_if_settings() {
+#
+# }
+##

@@ -3,6 +3,17 @@
 VERSION=0.4.6
 PROGNAME="$(basename $0)"
 
+INSTALL_LOC=/usr/share
+INSTALL_DIRNAME=create_ap
+INC_DIRNAME=inc
+
+CREATE_AP_DIR=$INSTALL_LOC/$INSTALL_DIRNAME
+CREATE_AP_INC=$CREATE_AP_DIR/$INC_DIRNAME
+
+if [[ ! -d "$CREATE_AP_INC" ]]; then
+   echo "Could not locate create_ap includes.";
+   exit 1;
+fi
 
 ######  iptable Option Flags  #######
 DASH_APPEND="-A"
@@ -126,80 +137,8 @@ export LC_ALL=C
 SCRIPT_UMASK=0077
 umask $SCRIPT_UMASK
 
-usage() {
-   echo "Usage: "$PROGNAME" [options] <wifi-interface> [<interface-with-internet>] [<access-point-name> [<passphrase>]]"
-   echo
-   echo "Options:"
-   echo "  -h, --help          Show this help"
-   echo "  --version            Print version number"
-   echo "  -c <channel>         Channel number (default: 1)"
-   echo "  -w <WPA version>      Use 1 for WPA, use 2 for WPA2, use 1+2 for both (default: 1+2)"
-   echo "  -n         Disable Internet sharing (if you use this, don't pass"
-   echo "         the <interface-with-internet> argument)"
-   echo "  -m <method>         Method for Internet sharing."
-   echo "         Use: 'nat' for NAT (default)"
-   echo "          'bridge' for bridging"
-   echo "          'none' for no Internet sharing (equivalent to -n)"
-   echo "  --psk            Use 64 hex digits pre-shared-key instead of passphrase"
-   echo "  --hidden         Make the Access Point hidden (do not broadcast the SSID)"
-   echo "  --mac-filter         Enable MAC address filtering"
-   echo "  --mac-filter-accept    Location of MAC address filter list (defaults to /etc/hostapd/hostapd.accept)"
-   echo "  --redirect-to-localhost If -n is set, redirect every web request to localhost (useful for public information networks)"
-   echo "  --hostapd-debug <level> With level between 1 and 2, passes arguments -d or -dd to hostapd for debugging."
-   echo "  --isolate-clients         Disable communication between clients"
-   echo "  --ieee80211n         Enable IEEE 802.11n (HT)"
-   echo "  --ieee80211ac          Enable IEEE 802.11ac (VHT)"
-   echo "  --ht_capab <HT>         HT capabilities (default: [HT40+])"
-   echo "  --vht_capab <VHT>         VHT capabilities"
-   echo "  --country <code>      Set two-letter country code for regularity (example: US)"
-   echo "  --freq-band <GHz>         Set frequency band. Valid inputs: 2.4, 5 (default: 2.4)"
-   echo "  --driver         Choose your WiFi adapter driver (default: nl80211)"
-   echo "  --no-virt            Do not create virtual interface"
-   echo "  --no-haveged         Do not run 'haveged' automatically when needed"
-   echo "  --fix-unmanaged         If NetworkManager shows your interface as unmanaged after you"
-   echo "         close create_ap, then use this option to switch your interface"
-   echo "         back to managed"
-   echo "  --mac <MAC>         Set MAC address"
-   echo "  --dhcp-dns <IP1[,IP2]>  Set DNS returned by DHCP"
-   echo "  --daemon         Run create_ap in the background"
-   echo "  --stop <id>         Send stop command to an already running create_ap. For an <id>"
-   echo "         you can put the PID of create_ap or the WiFi interface. You can"
-   echo "         get them with --list-running"
-   echo "  --list-running         Show the create_ap processes that are already running"
-   echo "  --list-clients <id>    List the clients connected to create_ap instance associated with <id>."
-   echo "         For an <id> you can put the PID of create_ap or the WiFi interface."
-   echo "         If virtual WiFi interface was created, then use that one."
-   echo "         You can get them with --list-running"
-   echo "  --mkconfig <conf_file>  Store configs in conf_file"
-   echo "  --config <conf_file>   Load configs from conf_file"
-   echo
-   echo "Non-Bridging Options:"
-   echo "  --no-dns         Disable dnsmasq DNS server"
-   echo "  --no-dnsmasq         Disable dnsmasq server completely"
-   echo "  -g <gateway>         IPv4 Gateway for the Access Point (default: 192.168.12.1)"
-   echo "  -d         DNS server will take into account /etc/hosts"
-   echo "  -e <hosts_file>         DNS server will take into account additional hosts file"
-   echo
-   echo "Useful informations:"
-   echo "  * If you're not using the --no-virt option, then you can create an AP with the same"
-   echo "   interface you are getting your Internet connection."
-   echo "  * You can pass your SSID and password through pipe or through arguments (see examples)."
-   echo "  * On bridge method if the <interface-with-internet> is not a bridge interface, then"
-   echo "   a bridge interface is created automatically."
-   echo
-   echo "Examples:"
-   echo "  "$PROGNAME" wlan0 eth0 MyAccessPoint MyPassPhrase"
-   echo "  echo -e 'MyAccessPoint\nMyPassPhrase' | "$PROGNAME" wlan0 eth0"
-   echo "  "$PROGNAME" wlan0 eth0 MyAccessPoint"
-   echo "  echo 'MyAccessPoint' | "$PROGNAME" wlan0 eth0"
-   echo "  "$PROGNAME" wlan0 wlan0 MyAccessPoint MyPassPhrase"
-   echo "  "$PROGNAME" -n wlan0 MyAccessPoint MyPassPhrase"
-   echo "  "$PROGNAME" -m bridge wlan0 eth0 MyAccessPoint MyPassPhrase"
-   echo "  "$PROGNAME" -m bridge wlan0 br0 MyAccessPoint MyPassPhrase"
-   echo "  "$PROGNAME" --driver rtl871xdrv wlan0 eth0 MyAccessPoint MyPassPhrase"
-   echo "  "$PROGNAME" --daemon wlan0 eth0 MyAccessPoint MyPassPhrase"
-   echo "  "$PROGNAME" --stop wlan0"
-}
+# source usage()
+. "$CREATE_AP_INC/usage.sh"
 
 # on success it echos a non-zero unused FD
 # on error it echos 0
@@ -217,90 +156,13 @@ get_avail_fd() {
 # lock file for the mutex counter
 COUNTER_LOCK_FILE=/tmp/create_ap.$$.lock
 
-cleanup_lock() {
-   rm -f $COUNTER_LOCK_FILE
-}
+# source mutex.sh:
+#   - cleanup_lock()
+#   - init_lock()
+#   - mutex_lock()
+#   - mutex_unlock()
+. "$CREATE_AP_INC/mutex.sh"
 
-init_lock() {
-   local LOCK_FILE=/tmp/create_ap.all.lock
-
-   # we initialize only once
-   [[ $LOCK_FD -ne 0 ]] && return 0
-
-   LOCK_FD=$(get_avail_fd)
-   [[ $LOCK_FD -eq 0 ]] && return 1
-
-   # open/create lock file with write access for all users
-   # otherwise normal users will not be able to use it.
-   # to avoid race conditions on creation, we need to
-   # use umask to set the permissions.
-   umask 0555
-   eval "exec $LOCK_FD>$LOCK_FILE" > /dev/null 2>&1 || return 1
-   umask $SCRIPT_UMASK
-
-   # there is a case where lock file was created from a normal
-   # user. change the owner to root as soon as we can.
-   [[ $(id -u) -eq 0 ]] && chown 0:0 $LOCK_FILE
-
-   # create mutex counter lock file
-   echo 0 > $COUNTER_LOCK_FILE
-
-   return $?
-}
-
-# recursive mutex lock for all create_ap processes
-mutex_lock() {
-   local counter_mutex_fd
-   local counter
-
-   # lock local mutex and read counter
-   counter_mutex_fd=$(get_avail_fd)
-   if [[ $counter_mutex_fd -ne 0 ]]; then
-      eval "exec $counter_mutex_fd<>$COUNTER_LOCK_FILE"
-      flock $counter_mutex_fd
-      read -u $counter_mutex_fd counter
-   else
-      echo "Failed to lock mutex counter" >&2
-      return 1
-   fi
-
-   # lock global mutex and increase counter
-   [[ $counter -eq 0 ]] && flock $LOCK_FD
-   counter=$(( $counter + 1 ))
-
-   # write counter and unlock local mutex
-   echo $counter > /proc/$BASHPID/fd/$counter_mutex_fd
-   eval "exec ${counter_mutex_fd}<&-"
-   return 0
-}
-
-# recursive mutex unlock for all create_ap processes
-mutex_unlock() {
-   local counter_mutex_fd
-   local counter
-
-   # lock local mutex and read counter
-   counter_mutex_fd=$(get_avail_fd)
-   if [[ $counter_mutex_fd -ne 0 ]]; then
-      eval "exec $counter_mutex_fd<>$COUNTER_LOCK_FILE"
-      flock $counter_mutex_fd
-      read -u $counter_mutex_fd counter
-   else
-      echo "Failed to lock mutex counter" >&2
-      return 1
-   fi
-
-   # decrease counter and unlock global mutex
-   if [[ $counter -gt 0 ]]; then
-      counter=$(( $counter - 1 ))
-      [[ $counter -eq 0 ]] && flock -u $LOCK_FD
-   fi
-
-   # write counter and unlock local mutex
-   echo $counter > /proc/$BASHPID/fd/$counter_mutex_fd
-   eval "exec ${counter_mutex_fd}<&-"
-   return 0
-}
 
 # it takes 2 arguments
 # returns:
@@ -327,435 +189,52 @@ version_cmp() {
 
 USE_IWCONFIG=0
 
-is_interface() {
-   [[ -z "$1" ]] && return 1
-   [[ -d "/sys/class/net/${1}" ]]
-}
-
-is_wifi_interface() {
-   which iw > /dev/null 2>&1 && iw dev $1 info > /dev/null 2>&1 && return 0
-   if which iwconfig > /dev/null 2>&1 && iwconfig $1 > /dev/null 2>&1; then
-      USE_IWCONFIG=1
-      return 0
-   fi
-   return 1
-}
-
-is_bridge_interface() {
-   [[ -z "$1" ]] && return 1
-   [[ -d "/sys/class/net/${1}/bridge" ]]
-}
-
-get_phy_device() {
-   local x
-   for x in /sys/class/ieee80211/*; do
-      [[ ! -e "$x" ]] && continue
-      if [[ "${x##*/}" = "$1" ]]; then
-         echo $1
-         return 0
-      elif [[ -e "$x/device/net/$1" ]]; then
-         echo ${x##*/}
-         return 0
-      elif [[ -e "$x/device/net:$1" ]]; then
-         echo ${x##*/}
-         return 0
-      fi
-   done
-   echo "Failed to get phy interface" >&2
-   return 1
-}
-
-get_adapter_info() {
-   local PHY
-   PHY=$(get_phy_device "$1")
-   [[ $? -ne 0 ]] && return 1
-   iw phy $PHY info
-}
-
-get_adapter_kernel_module() {
-   local MODULE
-   MODULE=$(readlink -f "/sys/class/net/$1/device/driver/module")
-   echo ${MODULE##*/}
-}
-
-can_be_sta_and_ap() {
-   # iwconfig does not provide this information, assume false
-   [[ $USE_IWCONFIG -eq 1 ]] && return 1
-   if [[ "$(get_adapter_kernel_module "$1")" == "brcmfmac" ]]; then
-      echo "WARN: brmfmac driver doesn't work properly with virtual interfaces and" >&2
-      echo "      it can cause kernel panic. For this reason we disallow virtual" >&2
-      echo "      interfaces for your adapter." >&2
-      echo "      For more info: https://github.com/oblique/create_ap/issues/203" >&2
-      return 1
-   fi
-   get_adapter_info "$1" | grep -E '{.* managed.* AP.*}' > /dev/null 2>&1 && return 0
-   get_adapter_info "$1" | grep -E '{.* AP.* managed.*}' > /dev/null 2>&1 && return 0
-   return 1
-}
-
-can_be_ap() {
-   # iwconfig does not provide this information, assume true
-   [[ $USE_IWCONFIG -eq 1 ]] && return 0
-   get_adapter_info "$1" | grep -E '\* AP$' > /dev/null 2>&1 && return 0
-   return 1
-}
-
-can_transmit_to_channel() {
-   local IFACE CHANNEL_NUM CHANNEL_INFO
-   IFACE=$1
-   CHANNEL_NUM=$2
-
-   if [[ $USE_IWCONFIG -eq 0 ]]; then
-      if [[ $FREQ_BAND == 2.4 ]]; then
-         CHANNEL_INFO=$(get_adapter_info ${IFACE} | grep " 24[0-9][0-9] MHz \[${CHANNEL_NUM}\]")
-      else
-         CHANNEL_INFO=$(get_adapter_info ${IFACE} | grep " \(49[0-9][0-9]\|5[0-9]\{3\}\) MHz \[${CHANNEL_NUM}\]")
-      fi
-      [[ -z "${CHANNEL_INFO}" ]] && return 1
-      [[ "${CHANNEL_INFO}" == *no\ IR* ]] && return 1
-      [[ "${CHANNEL_INFO}" == *disabled* ]] && return 1
-      return 0
-   else
-      CHANNEL_NUM=$(printf '%02d' ${CHANNEL_NUM})
-      CHANNEL_INFO=$(iwlist ${IFACE} channel | grep -E "Channel[[:blank:]]${CHANNEL_NUM}[[:blank:]]?:")
-      [[ -z "${CHANNEL_INFO}" ]] && return 1
-      return 0
-   fi
-}
-
-# taken from iw/util.c
-ieee80211_frequency_to_channel() {
-   local FREQ=$1
-   if [[ $FREQ -eq 2484 ]]; then
-      echo 14
-   elif [[ $FREQ -lt 2484 ]]; then
-      echo $(( ($FREQ - 2407) / 5 ))
-   elif [[ $FREQ -ge 4910 && $FREQ -le 4980 ]]; then
-      echo $(( ($FREQ - 4000) / 5 ))
-   elif [[ $FREQ -le 45000 ]]; then
-      echo $(( ($FREQ - 5000) / 5 ))
-   elif [[ $FREQ -ge 58320 && $FREQ -le 64800 ]]; then
-      echo $(( ($FREQ - 56160) / 2160 ))
-   else
-      echo 0
-   fi
-}
-
-is_5ghz_frequency() {
-   [[ $1 =~ ^(49[0-9]{2})|(5[0-9]{3})$ ]]
-}
-
-is_wifi_connected() {
-   if [[ $USE_IWCONFIG -eq 0 ]]; then
-      iw dev "$1" link 2>&1 | grep -E '^Connected to' > /dev/null 2>&1 && return 0
-   else
-      iwconfig "$1" 2>&1 | grep -E 'Access Point: [0-9a-fA-F]{2}:' > /dev/null 2>&1 && return 0
-   fi
-   return 1
-}
-
-is_macaddr() {
-   echo "$1" | grep -E "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$" > /dev/null 2>&1
-}
-
-is_unicast_macaddr() {
-   local x
-   is_macaddr "$1" || return 1
-   x=$(echo "$1" | cut -d: -f1)
-   x=$(printf '%d' "0x${x}")
-   [[ $(expr $x % 2) -eq 0 ]]
-}
-
-get_macaddr() {
-   is_interface "$1" || return
-   cat "/sys/class/net/${1}/address"
-}
-
-get_mtu() {
-   is_interface "$1" || return
-   cat "/sys/class/net/${1}/mtu"
-}
-
-alloc_new_iface() {
-   local prefix=$1
-   local i=0
-
-   mutex_lock
-   while :; do
-      if ! is_interface $prefix$i && [[ ! -f $COMMON_CONFDIR/ifaces/$prefix$i ]]; then
-         mkdir -p $COMMON_CONFDIR/ifaces
-         touch $COMMON_CONFDIR/ifaces/$prefix$i
-         echo $prefix$i
-         mutex_unlock
-         return
-      fi
-      i=$((i + 1))
-   done
-   mutex_unlock
-}
-
-dealloc_iface() {
-   rm -f $COMMON_CONFDIR/ifaces/$1
-}
-
-get_all_macaddrs() {
-   cat /sys/class/net/*/address
-}
-
-get_new_macaddr() {
-   local OLDMAC NEWMAC LAST_BYTE i
-   OLDMAC=$(get_macaddr "$1")
-   LAST_BYTE=$(printf %d 0x${OLDMAC##*:})
-   mutex_lock
-   for i in {1..255}; do
-      NEWMAC="${OLDMAC%:*}:$(printf %02x $(( ($LAST_BYTE + $i) % 256 )))"
-      (get_all_macaddrs | grep "$NEWMAC" > /dev/null 2>&1) || break
-   done
-   mutex_unlock
-   echo $NEWMAC
-}
-
-# start haveged when needed
-haveged_watchdog() {
-   local show_warn=1
-   while :; do
-      mutex_lock
-      if [[ $(cat /proc/sys/kernel/random/entropy_avail) -lt 1000 ]]; then
-         if ! which haveged > /dev/null 2>&1; then
-            if [[ $show_warn -eq 1 ]]; then
-               echo "WARN: Low entropy detected. We recommend you to install \`haveged'"
-               show_warn=0
-            fi
-         elif ! pidof haveged > /dev/null 2>&1; then
-            echo "Low entropy detected, starting haveged"
-            # boost low-entropy
-            haveged -w 1024 -p $COMMON_CONFDIR/haveged.pid
-         fi
-      fi
-      mutex_unlock
-      sleep 2
-   done
-}
-
-NETWORKMANAGER_CONF=/etc/NetworkManager/NetworkManager.conf
-NM_OLDER_VERSION=1
-
-networkmanager_exists() {
-   local NM_VER
-   which nmcli > /dev/null 2>&1 || return 1
-   NM_VER=$(nmcli -v | grep -m1 -oE '[0-9]+(\.[0-9]+)*\.[0-9]+')
-   version_cmp $NM_VER 0.9.9
-   if [[ $? -eq 1 ]]; then
-      NM_OLDER_VERSION=1
-   else
-      NM_OLDER_VERSION=0
-   fi
-   return 0
-}
-
-networkmanager_is_running() {
-   local NMCLI_OUT
-   networkmanager_exists || return 1
-   if [[ $NM_OLDER_VERSION -eq 1 ]]; then
-      NMCLI_OUT=$(nmcli -t -f RUNNING nm 2>&1 | grep -E '^running$')
-   else
-      NMCLI_OUT=$(nmcli -t -f RUNNING g 2>&1 | grep -E '^running$')
-   fi
-   [[ -n "$NMCLI_OUT" ]]
-}
-
-networkmanager_iface_is_unmanaged() {
-   is_interface "$1" || return 2
-   (nmcli -t -f DEVICE,STATE d 2>&1 | grep -E "^$1:unmanaged$" > /dev/null 2>&1) || return 1
-}
-
-ADDED_UNMANAGED=
-
-networkmanager_add_unmanaged() {
-   local MAC UNMANAGED WAS_EMPTY x
-   networkmanager_exists || return 1
-
-   [[ -d ${NETWORKMANAGER_CONF%/*} ]] || mkdir -p ${NETWORKMANAGER_CONF%/*}
-   [[ -f ${NETWORKMANAGER_CONF} ]] || touch ${NETWORKMANAGER_CONF}
-
-   if [[ $NM_OLDER_VERSION -eq 1 ]]; then
-      if [[ -z "$2" ]]; then
-         MAC=$(get_macaddr "$1")
-      else
-         MAC="$2"
-      fi
-      [[ -z "$MAC" ]] && return 1
-   fi
-
-   mutex_lock
-   UNMANAGED=$(grep -m1 -Eo '^unmanaged-devices=[[:alnum:]:;,-]*' /etc/NetworkManager/NetworkManager.conf)
-
-   WAS_EMPTY=0
-   [[ -z "$UNMANAGED" ]] && WAS_EMPTY=1
-   UNMANAGED=$(echo "$UNMANAGED" | sed 's/unmanaged-devices=//' | tr ';,' ' ')
-
-   # if it exists, do nothing
-   for x in $UNMANAGED; do
-      if [[ $x == "mac:${MAC}" ]] ||
-            [[ $NM_OLDER_VERSION -eq 0 && $x == "interface-name:${1}" ]]; then
-         mutex_unlock
-         return 2
-      fi
-   done
-
-   if [[ $NM_OLDER_VERSION -eq 1 ]]; then
-      UNMANAGED="${UNMANAGED} mac:${MAC}"
-   else
-      UNMANAGED="${UNMANAGED} interface-name:${1}"
-   fi
-
-   UNMANAGED=$(echo $UNMANAGED | sed -e 's/^ //')
-   UNMANAGED="${UNMANAGED// /;}"
-   UNMANAGED="unmanaged-devices=${UNMANAGED}"
-
-   if ! grep -E '^\[keyfile\]' ${NETWORKMANAGER_CONF} > /dev/null 2>&1; then
-      echo -e "\n\n[keyfile]\n${UNMANAGED}" >> ${NETWORKMANAGER_CONF}
-   elif [[ $WAS_EMPTY -eq 1 ]]; then
-      sed -e "s/^\(\[keyfile\].*\)$/\1\n${UNMANAGED}/" -i ${NETWORKMANAGER_CONF}
-   else
-      sed -e "s/^unmanaged-devices=.*/${UNMANAGED}/" -i ${NETWORKMANAGER_CONF}
-   fi
-
-   ADDED_UNMANAGED="${ADDED_UNMANAGED} ${1} "
-   mutex_unlock
-
-   local nm_pid=$(pidof NetworkManager)
-   [[ -n "$nm_pid" ]] && kill -HUP $nm_pid
-
-   return 0
-}
-
-networkmanager_rm_unmanaged() {
-   local MAC UNMANAGED
-   networkmanager_exists || return 1
-   [[ ! -f ${NETWORKMANAGER_CONF} ]] && return 1
-
-   if [[ $NM_OLDER_VERSION -eq 1 ]]; then
-      if [[ -z "$2" ]]; then
-         MAC=$(get_macaddr "$1")
-      else
-         MAC="$2"
-      fi
-      [[ -z "$MAC" ]] && return 1
-   fi
-
-   mutex_lock
-   UNMANAGED=$(grep -m1 -Eo '^unmanaged-devices=[[:alnum:]:;,-]*' /etc/NetworkManager/NetworkManager.conf | sed 's/unmanaged-devices=//' | tr ';,' ' ')
-
-   if [[ -z "$UNMANAGED" ]]; then
-      mutex_unlock
-      return 1
-   fi
-
-   [[ -n "$MAC" ]] && UNMANAGED=$(echo $UNMANAGED | sed -e "s/mac:${MAC}\( \|$\)//g")
-   UNMANAGED=$(echo $UNMANAGED | sed -e "s/interface-name:${1}\( \|$\)//g")
-   UNMANAGED=$(echo $UNMANAGED | sed -e 's/ $//')
-
-   if [[ -z "$UNMANAGED" ]]; then
-      sed -e "/^unmanaged-devices=.*/d" -i ${NETWORKMANAGER_CONF}
-   else
-      UNMANAGED="${UNMANAGED// /;}"
-      UNMANAGED="unmanaged-devices=${UNMANAGED}"
-      sed -e "s/^unmanaged-devices=.*/${UNMANAGED}/" -i ${NETWORKMANAGER_CONF}
-   fi
-
-   ADDED_UNMANAGED="${ADDED_UNMANAGED/ ${1} /}"
-   mutex_unlock
-
-   local nm_pid=$(pidof NetworkManager)
-   [[ -n "$nm_pid" ]] && kill -HUP $nm_pid
-
-   return 0
-}
-
-networkmanager_fix_unmanaged() {
-   [[ -f ${NETWORKMANAGER_CONF} ]] || return
-
-   mutex_lock
-   sed -e "/^unmanaged-devices=.*/d" -i ${NETWORKMANAGER_CONF}
-   mutex_unlock
-
-   local nm_pid=$(pidof NetworkManager)
-   [[ -n "$nm_pid" ]] && kill -HUP $nm_pid
-}
-
-networkmanager_rm_unmanaged_if_needed() {
-   [[ $ADDED_UNMANAGED =~ .*\ ${1}\ .* ]] && networkmanager_rm_unmanaged $1 $2
-}
-
-networkmanager_wait_until_unmanaged() {
-   local RES
-   networkmanager_is_running || return 1
-   while :; do
-      networkmanager_iface_is_unmanaged "$1"
-      RES=$?
-      [[ $RES -eq 0 ]] && break
-      [[ $RES -eq 2 ]] && die "Interface '${1}' does not exist.
-      It's probably renamed by a udev rule."
-      sleep 1
-   done
-   sleep 2
-   return 0
-}
+# source ifutil.sh:
+# Vars: None
+# Funcs:
+#   - is_interface()
+#   - is_wifi_interface()
+#   - is_bridge_interface()
+#   - get_phy_device()
+#   - get_adapter_info()
+#   - get_adapter_kernel_module()
+#   - can_be_sta_and_ap()
+#   - can_be_ap()
+#   - can_transmit_to_channel()
+#   - ieee80211_frequency_to_channel()
+#   - is_5ghz_frequency()
+#   - is_wifi_connected()
+#   - is_unicast_macaddr()
+#   - get_macaddr()
+#   - get_mtu()
+#   - alloc_new_iface()
+#   - dealloc_iface()
+#   - get_all_macaddrs()
+#   - get_new_macaddr()
+#   - haveged_watchdog()
+. "$CREATE_AP_INC/ifutil.sh"
 
 
-CHANNEL=default
-GATEWAY=192.168.12.1
-WPA_VERSION=1+2
-ETC_HOSTS=0
-ADDN_HOSTS=
-DHCP_DNS=gateway
-NO_DNS=0
-NO_DNSMASQ=0
-HIDDEN=0
-MAC_FILTER=0
-MAC_FILTER_ACCEPT=/etc/hostapd/hostapd.accept
-ISOLATE_CLIENTS=0
-SHARE_METHOD=nat
-IEEE80211N=0
-IEEE80211AC=0
-HT_CAPAB='[HT40+]'
-VHT_CAPAB=
-DRIVER=nl80211
-NO_VIRT=0
-COUNTRY=
-FREQ_BAND=2.4
-NEW_MACADDR=
-DAEMONIZE=0
-NO_HAVEGED=0
-USE_PSK=0
+# source netman.sh:
+# Vars:
+#   - NETWORKMANAGER_CONF
+#   - NM_OLDER_VERSION
+#   - ADDED_UNMANAGED
+# Funcs:
+#   - networkmanager_exists()
+#   - networkmanager_is_running()
+#   - networkmanager_iface_is_unmanaged()
+#   - networkmanager_add_unmanaged()
+#   - networkmanager_rm_unmanaged()
+#   - networkmanager_fix_unmanaged()
+#   - networkmanager_rm_unmanaged_if_needed()
+#   - networkmanager_wait_until_unmanaged()
+. "$CREATE_AP_INC/netman.sh"
 
-HOSTAPD_DEBUG_ARGS=
-REDIRECT_TO_LOCALHOST=0
-
-CONFIG_OPTS=(CHANNEL GATEWAY WPA_VERSION ETC_HOSTS DHCP_DNS NO_DNS NO_DNSMASQ HIDDEN MAC_FILTER MAC_FILTER_ACCEPT ISOLATE_CLIENTS
-         SHARE_METHOD IEEE80211N IEEE80211AC HT_CAPAB VHT_CAPAB DRIVER NO_VIRT COUNTRY FREQ_BAND
-         NEW_MACADDR DAEMONIZE NO_HAVEGED WIFI_IFACE INTERNET_IFACE
-         SSID PASSPHRASE USE_PSK)
-
-FIX_UNMANAGED=0
-LIST_RUNNING=0
-STOP_ID=
-LIST_CLIENTS_ID=
-
-STORE_CONFIG=
-LOAD_CONFIG=
-
-CONFDIR=
-WIFI_IFACE=
-VWIFI_IFACE=
-INTERNET_IFACE=
-BRIDGE_IFACE=
-OLD_MACADDR=
-IP_ADDRS=
-ROUTE_ADDRS=
-
-HAVEGED_WATCHDOG_PID=
+# source defaults.sh:
+# Vars: A bunch
+# Funcs: None
+. "$CREATE_AP_INC/defaults.sh"
 
 
 _clean_custom_iptables() {
@@ -1127,235 +606,14 @@ read_config() {
    done < "$LOAD_CONFIG"
 }
 
+# source args.sh:
+# Vars:
+#   - ARGS
+#   - GETOPT_ARGS
+# Funcs:
+#  None, but processes args
+. "$CREATE_AP_INC/args.sh"
 
-ARGS=( "$@" )
-
-# Preprocessing for --config before option-parsing starts
-for ((i=0; i<$#; i++)); do
-   if [[ "${ARGS[i]}" = "--config" ]]; then
-      if [[ -f "${ARGS[i+1]}" ]]; then
-         LOAD_CONFIG="${ARGS[i+1]}"
-         read_config
-      else
-         echo "ERROR: No config file found at given location" >&2
-         exit 1
-      fi
-      break
-   fi
-done
-
-GETOPT_ARGS=$(getopt -o hc:w:g:de:nm: -l "help","hidden","hostapd-debug:","redirect-to-localhost","mac-filter","mac-filter-accept:","isolate-clients","ieee80211n","ieee80211ac","ht_capab:","vht_capab:","driver:","no-virt","fix-unmanaged","country:","freq-band:","mac:","dhcp-dns:","daemon","stop:","list","list-running","list-clients:","version","psk","no-haveged","no-dns","no-dnsmasq","mkconfig:","config:" -n "$PROGNAME" -- "$@")
-[[ $? -ne 0 ]] && exit 1
-eval set -- "$GETOPT_ARGS"
-
-while :; do
-   case "$1" in
-      -h|--help)
-         usage
-         exit 0
-         ;;
-      --version)
-         echo $VERSION
-         exit 0
-         ;;
-      --hidden)
-         shift
-         HIDDEN=1
-         ;;
-      --mac-filter)
-         shift
-         MAC_FILTER=1
-         ;;
-      --mac-filter-accept)
-         shift
-         MAC_FILTER_ACCEPT="$1"
-         shift
-         ;;
-      --isolate-clients)
-         shift
-         ISOLATE_CLIENTS=1
-         ;;
-      -c)
-         shift
-         CHANNEL="$1"
-         shift
-         ;;
-      -w)
-         shift
-         WPA_VERSION="$1"
-         [[ "$WPA_VERSION" == "2+1" ]] && WPA_VERSION=1+2
-         shift
-         ;;
-      -g)
-         shift
-         GATEWAY="$1"
-         shift
-         ;;
-      -d)
-         shift
-         ETC_HOSTS=1
-         ;;
-      -e)
-         shift
-         ADDN_HOSTS="$1"
-         shift
-         ;;
-      -n)
-         shift
-         SHARE_METHOD=none
-         ;;
-      -m)
-         shift
-         SHARE_METHOD="$1"
-         shift
-         ;;
-      --ieee80211n)
-         shift
-         IEEE80211N=1
-         ;;
-      --ieee80211ac)
-         shift
-         IEEE80211AC=1
-         ;;
-      --ht_capab)
-         shift
-         HT_CAPAB="$1"
-         shift
-         ;;
-      --vht_capab)
-         shift
-         VHT_CAPAB="$1"
-         shift
-         ;;
-      --driver)
-         shift
-         DRIVER="$1"
-         shift
-         ;;
-      --no-virt)
-         shift
-         NO_VIRT=1
-         ;;
-      --fix-unmanaged)
-         shift
-         FIX_UNMANAGED=1
-         ;;
-      --country)
-         shift
-         COUNTRY="$1"
-         shift
-         ;;
-      --freq-band)
-         shift
-         FREQ_BAND="$1"
-         shift
-         ;;
-      --mac)
-         shift
-         NEW_MACADDR="$1"
-         shift
-         ;;
-      --dhcp-dns)
-         shift
-         DHCP_DNS="$1"
-         shift
-         ;;
-      --daemon)
-         shift
-         DAEMONIZE=1
-         ;;
-      --stop)
-         shift
-         STOP_ID="$1"
-         shift
-         ;;
-      --list)
-         shift
-         LIST_RUNNING=1
-         echo -e "WARN: --list is deprecated, use --list-running instead.\n" >&2
-         ;;
-      --list-running)
-         shift
-         LIST_RUNNING=1
-         ;;
-      --list-clients)
-         shift
-         LIST_CLIENTS_ID="$1"
-         shift
-         ;;
-      --no-haveged)
-         shift
-         NO_HAVEGED=1
-         ;;
-      --psk)
-         shift
-         USE_PSK=1
-         ;;
-      --no-dns)
-         shift
-         NO_DNS=1
-         ;;
-      --no-dnsmasq)
-         shift
-         NO_DNSMASQ=1
-         ;;
-      --redirect-to-localhost)
-         shift
-         REDIRECT_TO_LOCALHOST=1
-         ;;
-      --hostapd-debug)
-         shift
-         if [ "x$1" = "x1" ]; then
-            HOSTAPD_DEBUG_ARGS="-d"
-         elif [ "x$1" = "x2" ]; then
-            HOSTAPD_DEBUG_ARGS="-dd"
-         else
-            printf "Error: argument for --hostapd-debug expected 1 or 2, got %s\n" "$1"
-            exit 1
-         fi
-         shift
-         ;;
-      --mkconfig)
-         shift
-         STORE_CONFIG="$1"
-         shift
-         ;;
-      --config)
-         shift
-         shift
-         ;;
-      --)
-         shift
-         break
-         ;;
-   esac
-done
-
-# Load positional args from config file, if needed
-if [[ -n "$LOAD_CONFIG" && $# -eq 0 ]]; then
-   i=0
-   # set arguments in order
-   for x in WIFI_IFACE INTERNET_IFACE SSID PASSPHRASE; do
-      if eval "[[ -n \"\$${x}\" ]]"; then
-         eval "set -- \"\${@:1:$i}\" \"\$${x}\""
-         ((i++))
-      fi
-      # we unset the variable to avoid any problems later
-      eval "unset $x"
-   done
-fi
-
-# Check if required number of positional args are present
-if [[ $# -lt 1 && $FIX_UNMANAGED -eq 0  && -z "$STOP_ID" &&
-      $LIST_RUNNING -eq 0 && -z "$LIST_CLIENTS_ID" ]]; then
-   usage >&2
-   exit 1
-fi
-
-# Set NO_DNS, if dnsmasq is disabled
-if [[ $NO_DNSMASQ -eq 1 ]]; then
-   NO_DNS=1
-fi
 
 trap "cleanup_lock" EXIT
 

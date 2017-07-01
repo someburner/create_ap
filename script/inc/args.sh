@@ -201,29 +201,3 @@ while :; do
          ;;
    esac
 done
-
-# Load positional args from config file, if needed
-if [[ -n "$LOAD_CONFIG" && $# -eq 0 ]]; then
-   i=0
-   # set arguments in order
-   for x in WIFI_IFACE INTERNET_IFACE SSID PASSPHRASE; do
-      if eval "[[ -n \"\$${x}\" ]]"; then
-         eval "set -- \"\${@:1:$i}\" \"\$${x}\""
-         ((i++))
-      fi
-      # we unset the variable to avoid any problems later
-      eval "unset $x"
-   done
-fi
-
-# Check if required number of positional args are present
-if [[ $# -lt 1 && $FIX_UNMANAGED -eq 0  && -z "$STOP_ID" &&
-      $LIST_RUNNING -eq 0 && -z "$LIST_CLIENTS_ID" ]]; then
-   usage >&2
-   exit 1
-fi
-
-# Set NO_DNS, if dnsmasq is disabled
-if [[ $NO_DNSMASQ -eq 1 ]]; then
-   NO_DNS=1
-fi

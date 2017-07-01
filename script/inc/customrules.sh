@@ -9,27 +9,7 @@ ADDARG="add"
 DELARG="del"
 #####################################
 
-#########  iptable routing  #########
-DROP_DEST_IPMASK="45.32.67.0/24"
-DROP_DEST_PORT=1883
-DELAY_DEST_IPMASK="45.32.67.0/24"
-DELAY_DEST_PORT=1883
-#####################################
-
-######  iptable filter en/dis  ######
-DROP_INBOUND_EN=yes
-# DROP_INBOUND_EN=no
-DROP_OUTBOUND_EN=yes
-# DROP_OUTBOUND_EN=no
-
-RM_WIFI_IF=""
-
-DELAY_EN=yes
-# DELAY_EN=no
-#####################################
-
-#######   Pct. DROP filter   ########
-DROP_OUTBOUND_PCT=0.25
+DELAY_RULE_COUNT=0
 
 # $1 = WIFI_IFACE; $2 drop (-D)/add (-I)
 format_drop_iptable_rule () {
@@ -48,49 +28,90 @@ format_drop_iptable_rule () {
 #########   Delay filter   #########
 SIMPLE_DELAY=1
 NORMAL_DIST_DELAY=2
-VARIANCE_DELAY=3
+DELAY_LOSS=3
 
-# Delay base for all types
-DELAY_TIME_MS=100
-# Delay variance for type 2
-DELAY_VAR_PCT=25
-# Delay normal dist for type 3
-DELAY_DISTRIBUTION=20
+DELAY_ANY=0
+DELAY_OUTGOING=1
+DELAY_INCOMING=2
 
-set_delay_rules() {
+# Set traffic control for a network / port
+# tcset --device eth0 --delay 100 --network 192.168.0.0/24 --port 80
+#
+# Set traffic control both incoming and outgoing network
+# tcset --device eth0 --direction outgoing --rate 200K --network 192.168.0.0/24
+#
+# Set 100ms +- 20ms network latency with normal distribution
+# tcset --device eth0 --delay 100 --delay-distro 20
+PREV_DELAY_CMD='';
+
+set_delay_rule() {
    local IFACE=$1;
-   local TYPE=$2;
-   local PARAM_DBG='';
+   local DIRECTION=$2
+   local IPMASK=$3
+   local PORT=$4
+
+   local TYPE=$5;
+   local DELAY=$6;
+
+   local PARAM_DBG="Delay Type: $TYPE";
+   PARAM_DBG+="\nBase delay: $DELAY (ms) ";
+   PARAM_DBG+="\nNeeds Add: ";
+
+   local NEEDS_ADD='';
+   if [[ $DELAY_RULE_COUNT > 0 ]]; then
+      NEEDS_ADD="--add"; PARAM_DBG+="true";
+   else
+      PARAM_DBG+="false";
+   fi
+
+   ## --direction ##
+   local DIRECTION_ARG='';
+   PARAM_DBG+="\nDirection: ";
+   case "$DIRECTION" in
+      "$DELAY_ANY") PARAM_DBG+="in+out"; >&2; DIRECTION_ARG="";
+      ;;
+      "$DELAY_OUTGOING") PARAM_DBG+="outgoing"; >&2; DIRECTION_ARG="--direction outgoing";
+      ;;
+      "$DELAY_INCOMING") PARAM_DBG+="incoming"; >&2; DIRECTION_ARG="--direction incoming";
+      ;;
+      *) echo "Invalid? DIRECTION=$DIRECTION" >&2;
+         return;
+      ;;
+   esac
+   ## ------------------------------- ##
+   PARAM_DBG+="\ndevice: $IFACE";
+   PARAM_DBG+="\nIP/Mask: $IPMASK :$PORT";
+   local COMMON_PARAMS=(tcset --device $IFACE $DIRECTION_ARG --network $IPMASK --port $PORT)
+
    local ADD_DELAY_CMD='';
+   PARAM_DBG+="\nName: ";
    case "$TYPE" in
-      "1") echo "basic delay" >&2;
-         local DELAY1=$3;
-         PARAM_DBG+="Delay=$DELAY1";
-         ADD_DELAY_CMD=(tcset --device $IFACE --delay $DELAY1)
+      "$SIMPLE_DELAY") PARAM_DBG+="basic delay";
+         ADD_DELAY_CMD=(${COMMON_PARAMS[@]} --delay $DELAY $NEEDS_ADD)
       ;;
-      "2") echo "normal dist delay" >&2;
-         local DELAY1=$3;
-         local DELAY_DIST=$4;
-         PARAM_DBG+="Delay=$DELAY1";
+      "$NORMAL_DIST_DELAY")
+         local DELAY_DIST=$7;
          PARAM_DBG+="Delay dist=$DELAY_DIST";
-         ADD_DELAY_CMD=(tcset --device $IFACE --delay $DELAY1 $DELAY_DIST)
+         ADD_DELAY_CMD=(${COMMON_PARAMS[@]} --delay $DELAY --delay-distro $DELAY_DIST $NEEDS_ADD)
       ;;
-      "3") echo "variance delay" >&2;
-         local DELAY1=$3;
-         local DELAY_DIST=$4;
-         local DELAY_PCT=$5;
-         PARAM_DBG+="Delay=$DELAY1";
-         PARAM_DBG+="Delay dist=$DELAY_DIST";
-         PARAM_DBG+="Delay pct=$DELAY_PCT %";
-         ADD_DELAY_CMD=(tcset --device $IFACE --delay $DELAY1 $DELAY_DIST $DELAY_PCT)
+      "$DELAY_LOSS")
+         local LOSS_PCT=$7;
+         PARAM_DBG+="loss pct=$LOSS_PCT %";
+         ADD_DELAY_CMD=(${COMMON_PARAMS[@]} --loss $LOSS_PCT $NEEDS_ADD)
       ;;
       *) echo "Invalid or wrong arg!">&2;
          return;
       ;;
    esac
-   printf "Adding rule: $TYPE to if $IFACE and params:\n$PARAM_DBG";
-   printf "\n${ADD_DELAY_CMD[@]}\n" >&2;
+
+   PREV_DELAY_CMD=( "${ADD_DELAY_CMD[@]}" );
+   DELAY_RULE_COUNT=$(($DELAY_RULE_COUNT+1));
    ${ADD_DELAY_CMD[@]};
+
+   printf "\nDELAY:\n$PARAM_DBG\n";
+   printf 'Full Command:\n  > '
+   echo "${PREV_DELAY_CMD[@]}";
+   printf "\n";
 }
 
 clear_delay_rules() {
@@ -99,6 +120,7 @@ clear_delay_rules() {
    DEL_DELAY_CMD=(tcdel --device $IFACE)
    printf "\n${DEL_DELAY_CMD[@]}\n" >&2;
    ${DEL_DELAY_CMD[@]};
+   DELAY_RULE_COUNT=0;
 }
 
 # clear_delay_rules "$WIFI_IFACE" "$DELAY_TYPE";

@@ -3,6 +3,8 @@
 VERSION=0.4.6
 PROGNAME="$(basename $0)"
 
+unset ALL_PROXY
+
 # Must match whatever's in Makefile
 CREATE_AP_INC=/usr/share/create_ap/inc
 
@@ -11,12 +13,50 @@ if [[ ! -d "$CREATE_AP_INC" ]]; then
    exit 1;
 fi
 
+######  custom filters en/dis  ######
+# DROP_INBOUND_EN=yes
+DROP_INBOUND_EN=no
+# DROP_OUTBOUND_EN=yes
+DROP_OUTBOUND_EN=no
+
+DELAY_EN=yes
+# DELAY_EN=no
+#####################################
+
+######  custom filter routing  ######
+DEPLOY_MASK="45.32.67.231/32";
+
+STAGING_MASK="45.32.93.103/32";
+
+MQTT_PORT=1883
+
+## Drop Packets
+# DROP_DEST_IPMASK=$FLUMETECH_DEPLOY_MASK
+DROP_DEST_PORT=$MQTT_PORT
+DROP_OUTBOUND_PCT=0.25
+
+## Delay Packets
+# DELAY_IPMASK=$FLUMETECH_DEPLOY_MASK
+
+DELAY_PORT=$MQTT_PORT
+#####################################
+
+###########  delay rules  ###########
+# Delay base for all types
+DELAY_TIME_MS=220
+
+# Delay variance for type 2
+DELAY_VAR_PCT=25
+
+# Delay normal dist for type 3
+DELAY_DISTRIBUTION=20
+#####################################
+
+RM_WIFI_IF=""
 # source customrules.sh
-# Vars: DROP_DEST_IPMASK, DROP_DEST_PORT, DELAY_DEST_IPMASK, DELAY_DEST_PORT,
-#    DROP_INBOUND_EN, DROP_OUTBOUND_EN, DROP_OUTBOUND_PCT, RM_WIFI_IF
-#    DELAY_EN, SIMPLE_DELAY, NORMAL_DIST_DELAY, VARIANCE_DELAY
+# Vars: SIMPLE_DELAY, NORMAL_DIST_DELAY, DELAY_LOSS
 #    DELAY_TIME_MS, DELAY_VAR_PCT, DELAY_DISTRIBUTION
-# Funcs: clear_delay_rules, set_delay_rules, format_drop_iptable_rule
+# Funcs: clear_delay_rules, set_delay_rule, format_drop_iptable_rule
 echo "sourcing customrules.sh..."
 . "$CREATE_AP_INC/customrules.sh"
 
@@ -124,6 +164,32 @@ echo "sourcing utils.sh..."
 # Funcs: None, but processes args
 echo "sourcing args.sh..."
 . "$CREATE_AP_INC/args.sh"
+
+# Load positional args from config file, if needed
+if [[ -n "$LOAD_CONFIG" && $# -eq 0 ]]; then
+   i=0
+   # set arguments in order
+   for x in WIFI_IFACE INTERNET_IFACE SSID PASSPHRASE; do
+      if eval "[[ -n \"\$${x}\" ]]"; then
+         eval "set -- \"\${@:1:$i}\" \"\$${x}\""
+         ((i++))
+      fi
+      # we unset the variable to avoid any problems later
+      eval "unset $x"
+   done
+fi
+
+# Check if required number of positional args are present
+if [[ $# -lt 1 && $FIX_UNMANAGED -eq 0  && -z "$STOP_ID" &&
+      $LIST_RUNNING -eq 0 && -z "$LIST_CLIENTS_ID" ]]; then
+   usage >&2
+   exit 1
+fi
+
+# Set NO_DNS, if dnsmasq is disabled
+if [[ $NO_DNSMASQ -eq 1 ]]; then
+   NO_DNS=1
+fi
 
 trap "cleanup_lock" EXIT
 
@@ -431,9 +497,11 @@ if [[ "$SHARE_METHOD" != "none" ]]; then
          ${INS_DROP_OUTBOUND_CMD} || die;
       fi
       # Set delays
-      clear_delay_rules "$WIFI_IFACE"
+      clear_delay_rules "$WIFI_IFACE";
       if [[ "$DELAY_EN" == "yes" ]]; then
-         set_delay_rules "$WIFI_IFACE" "$SIMPLE_DELAY" "100";
+         echo "123412341234";
+         set_delay_rule "$WIFI_IFACE" "$DELAY_INCOMING" "$STAGING_MASK" "$DELAY_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
+         echo "123412341234";
       fi
       iptables -w -I FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT || die
       echo 1 > /proc/sys/net/ipv4/conf/$INTERNET_IFACE/forwarding || die

@@ -16,34 +16,39 @@ fi
 ######  custom filters en/dis  ######
 # DROP_INBOUND_EN=yes
 DROP_INBOUND_EN=no
-# DROP_OUTBOUND_EN=yes
-DROP_OUTBOUND_EN=no
+
+DROP_OUTBOUND_EN=yes
+# DROP_OUTBOUND_EN=no
 
 DELAY_EN=yes
 # DELAY_EN=no
 #####################################
 
 ######  custom filter routing  ######
+
 DEPLOY_MASK="45.32.67.231/32";
 
 STAGING_MASK="45.32.93.103/32";
+
+LOCAL_MASK="192.168.12.0/24";
+
+# OUTB_DROP_MASK="0/0";
+OUTB_DROP_MASK="192.168.0.0/16";
 
 MQTT_PORT=1883
 
 ## Drop Packets
 # DROP_DEST_IPMASK=$FLUMETECH_DEPLOY_MASK
-DROP_DEST_PORT=$MQTT_PORT
-DROP_OUTBOUND_PCT=0.25
+DROP_OUTBOUND_PCT=0.20
 
 ## Delay Packets
 # DELAY_IPMASK=$FLUMETECH_DEPLOY_MASK
-
-DELAY_PORT=$MQTT_PORT
 #####################################
 
 ###########  delay rules  ###########
 # Delay base for all types
-DELAY_TIME_MS=220
+# DELAY_TIME_MS=220
+DELAY_TIME_MS=500
 
 # Delay variance for type 2
 DELAY_VAR_PCT=25
@@ -492,16 +497,15 @@ if [[ "$SHARE_METHOD" != "none" ]]; then
       iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
       # insert drop
       if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-         INS_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_INSERT")
-         printf "\n${INS_DROP_OUTBOUND_CMD[@]}\n" >&2;
-         ${INS_DROP_OUTBOUND_CMD} || die;
+         format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_INSERT" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT";
+         # iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
       fi
       # Set delays
       clear_delay_rules "$WIFI_IFACE";
       if [[ "$DELAY_EN" == "yes" ]]; then
-         echo "123412341234";
-         set_delay_rule "$WIFI_IFACE" "$DELAY_INCOMING" "$STAGING_MASK" "$DELAY_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
-         echo "123412341234";
+         set_delay_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$STAGING_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
+         set_delay_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DEPLOY_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
+         set_delay_rule "$WIFI_IFACE" "$DIR_INCOMING" "$LOCAL_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
       fi
       iptables -w -I FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT || die
       echo 1 > /proc/sys/net/ipv4/conf/$INTERNET_IFACE/forwarding || die

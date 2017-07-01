@@ -9,17 +9,54 @@ ADDARG="add"
 DELARG="del"
 #####################################
 
-DELAY_RULE_COUNT=0
+DIR_ANY=0
+DIR_OUTGOING=1
+DIR_INCOMING=2
 
-# $1 = WIFI_IFACE; $2 drop (-D)/add (-I)
 format_drop_iptable_rule () {
    local cmd="";
    local outputtmp="";
    local IFACE=$1;
-   local PARAM=$2;
-   cmd=(iptables -w "$PARAM" FORWARD -i ${IFACE} -d $DROP_DEST_IPMASK -p tcp --dport $DROP_DEST_PORT -m statistic --mode random --probability $DROP_OUTBOUND_PCT -j DROP);
-   outputtmp="${cmd[@]}";
-   echo $outputtmp
+   local DIRECTION=$2
+   local ACTION=$3;
+   local IPMASK=$4
+   local PORT=$5
+   local DROP_PCT=$6;
+
+   # format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_INSERT" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT";
+   # iptables -w -I FORWARD -i ap0 -p tcp --sport 1883 -m statistic --mode random --probability 0.20 -j DROP
+
+   local PARAM_DBG="Drop: $DROP_PCT";
+   PARAM_DBG+="\ndevice: $IFACE";
+   PARAM_DBG+="\nIP/Mask: $IPMASK port: $PORT";
+   PARAM_DBG+="\nDirection: ";
+   # iptables -w -I FORWARD -i ap0 -p tcp --sport 1883 -m statistic --mode random --probability 0.20 -j DROP
+   # "$DIR_OUTGOING") PARAM_DBG+="outgoing"; >&2; DIR_PARAMS=(-s $IPMASK -p tcp --sport $PORT);
+   ## --direction ##
+   local DIRECTION_ARG='';
+   local DIR_PARAMS=();
+   case "$DIRECTION" in
+      "$DIR_ANY") PARAM_DBG+="in+out"; >&2; DIR_PARAMS=();
+      ;;
+      "$DIR_OUTGOING") PARAM_DBG+="outgoing"; >&2; DIR_PARAMS=(-s $IPMASK );
+      ;;
+      "$DIR_INCOMING") PARAM_DBG+="incoming"; >&2; DIR_PARAMS=(-d $IPMASK );
+      ;;
+      *) echo "Invalid? DIRECTION=$DIRECTION" >&2;
+         return;
+      ;;
+   esac
+   ## ------------------------------- ##
+   local RULE_CMD=( iptables -w $ACTION FORWARD -i $IFACE ${DIR_PARAMS[@]} -m statistic --mode random --probability $DROP_PCT -j DROP );
+   local TMP_RULE=( "${RULE_CMD[@]}" );
+   # ${RULE_CMD[@]};
+   ${TMP_RULE[@]};
+
+   printf "\nFILTER:\n";
+   printf "$PARAM_DBG";
+   printf "Full Command \n  > ";
+   echo "${TMP_RULE[@]}";
+   printf "\n";
 }
 # ADD_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_INSERT")  # Insert
 # RM_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_DELETE")   # Delete
@@ -30,9 +67,7 @@ SIMPLE_DELAY=1
 NORMAL_DIST_DELAY=2
 DELAY_LOSS=3
 
-DELAY_ANY=0
-DELAY_OUTGOING=1
-DELAY_INCOMING=2
+DELAY_RULE_COUNT=0
 
 # Set traffic control for a network / port
 # tcset --device eth0 --delay 100 --network 192.168.0.0/24 --port 80
@@ -68,11 +103,11 @@ set_delay_rule() {
    local DIRECTION_ARG='';
    PARAM_DBG+="\nDirection: ";
    case "$DIRECTION" in
-      "$DELAY_ANY") PARAM_DBG+="in+out"; >&2; DIRECTION_ARG="";
+      "$DIR_ANY") PARAM_DBG+="in+out"; >&2; DIRECTION_ARG="";
       ;;
-      "$DELAY_OUTGOING") PARAM_DBG+="outgoing"; >&2; DIRECTION_ARG="--direction outgoing";
+      "$DIR_OUTGOING") PARAM_DBG+="outgoing"; >&2; DIRECTION_ARG="--direction outgoing";
       ;;
-      "$DELAY_INCOMING") PARAM_DBG+="incoming"; >&2; DIRECTION_ARG="--direction incoming";
+      "$DIR_INCOMING") PARAM_DBG+="incoming"; >&2; DIRECTION_ARG="--direction incoming";
       ;;
       *) echo "Invalid? DIRECTION=$DIRECTION" >&2;
          return;
@@ -96,7 +131,7 @@ set_delay_rule() {
       ;;
       "$DELAY_LOSS")
          local LOSS_PCT=$7;
-         PARAM_DBG+="loss pct=$LOSS_PCT %";
+         PARAM_DBG+="loss pct=$LOSS_PCT ";
          ADD_DELAY_CMD=(${COMMON_PARAMS[@]} --loss $LOSS_PCT $NEEDS_ADD)
       ;;
       *) echo "Invalid or wrong arg!">&2;

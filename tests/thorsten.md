@@ -1,6 +1,59 @@
 ###
 
 ```
+######  custom filters en/dis  ######
+# DROP_INBOUND_EN=yes
+DROP_INBOUND_EN=no
+
+DROP_OUTBOUND_EN=yes
+# DROP_OUTBOUND_EN=no
+
+DELAY_EN=yes
+# DELAY_EN=no
+#####################################
+
+######  custom filter routing  ######
+
+DEPLOY_MASK="45.32.67.231/32";
+
+STAGING_MASK="45.32.93.103/32";
+
+LOCAL_MASK="192.168.12.0/24";
+
+# OUTB_DROP_MASK="0/0";
+OUTB_DROP_MASK="192.168.0.0/16";
+
+MQTT_PORT=1883
+
+## Drop Packets
+# DROP_DEST_IPMASK=$FLUMETECH_DEPLOY_MASK
+DROP_OUTBOUND_PCT=0.20
+
+## Delay Packets
+# DELAY_IPMASK=$FLUMETECH_DEPLOY_MASK
+#####################################
+
+###########  delay rules  ###########
+# Delay base for all types
+# DELAY_TIME_MS=220
+DELAY_TIME_MS=500
+
+# Delay variance for type 2
+DELAY_VAR_PCT=25
+
+# Delay normal dist for type 3
+DELAY_DISTRIBUTION=20
+#####################################
+```
+
+
+```
+## simulate
+iptables -w -I FORWARD -i ap0 -p tcp --sport 1883 -m statistic --mode random --probability 0.20 -j DROP
+
+
+
+mosquitto_pub -h staging.flumetech.com -u device -P 28asfnvFensL -t /responses/56F8A39248B956DD -m '{"timestamp":1494566481,"args":{"branch":"pilot-2.1","sha":"7e19df6","rom":2},"command":6}'
 
 ## deploy or staging
 dst host 45.32.67.231 or dst host 45.32.93.103

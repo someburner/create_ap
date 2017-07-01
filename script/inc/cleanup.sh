@@ -1,14 +1,14 @@
 #!/bin/bash
 
 _clean_custom_iptables() {
+   # delay
+   if [[ "$DELAY_EN" == "yes" ]]; then
+      clear_delay_rules "$WIFI_IFACE";
+   fi
    # drop
    if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-      RM_DROP_OUTBOUND_CMD=$(format_drop_iptable_rule "$WIFI_IFACE" "$DASH_DELETE")
-      echo "${RM_DROP_OUTBOUND_CMD[@]}" >&2;
-      ${RM_DROP_OUTBOUND_CMD[@]};
+      format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_DELETE" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT" "$";
    fi
-
-   clear_delay_rules "$WIFI_IFACE";
 }
 
 _cleanup() {

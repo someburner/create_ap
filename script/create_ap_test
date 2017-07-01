@@ -7,7 +7,9 @@ INSTALL_LOC=/usr/share
 INSTALL_DIRNAME=create_ap
 INC_DIRNAME=inc
 
+# /usr/share/create_ap
 CREATE_AP_DIR=$INSTALL_LOC/$INSTALL_DIRNAME
+# /usr/share/create_ap/inc
 CREATE_AP_INC=$CREATE_AP_DIR/$INC_DIRNAME
 
 if [[ ! -d "$CREATE_AP_INC" ]]; then

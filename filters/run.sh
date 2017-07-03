@@ -21,6 +21,11 @@ OUTB_DROP_MASK="192.168.0.0/16";
 MQTT_PORT=1883
 
 WIFI_IF=ap0
+
+USER=jeffrey
+# TC_CFG_NAME="$WIFI_IF"
+TC_CFG_NAME="tcconfig.json"
+TC_CFG_PATH="$BACKUPS_DIR/$TC_CFG_NAME"
 #####################################
 
 ########   filtering rules   ########
@@ -67,8 +72,10 @@ if [ -d "$1" ];
 ###############################################
 DELAY_ADD=1
 FILTER_ADD=2
-DELAY_RESTORE=3
-FILTER_RESTORE=4
+SHOW_DELAY=3
+SHOW_TABLES=4
+DELAY_RESTORE=5
+FILTER_RESTORE=6
 
 RUNSEL=0
 
@@ -77,8 +84,10 @@ IF is $WIFI_IF
 Options:
    1) Add delay
    2) Add drop filter
-   3) Restore delay settings
-   4) Restore filter setings
+   3) Show delay settings
+   4) Show filter settings (iptables)
+   5) Restore delay settings
+   6) Restore filter setings
 ";
 
 whattodo() {
@@ -86,14 +95,12 @@ whattodo() {
     echo "Choose and press [enter]." >&2;
     read -r -p "${1:-[1-4] > } " response
     case "$response" in
-        "$DELAY_ADD") return $DELAY_ADD;
-        ;;
-        "$FILTER_ADD") return $FILTER_ADD;
-        ;;
-        "$DELAY_RESTORE") return $DELAY_RESTORE;
-        ;;
-        "$FILTER_RESTORE") return $FILTER_RESTORE;
-        ;;
+        "$DELAY_ADD") return $DELAY_ADD; ;;
+        "$FILTER_ADD") return $FILTER_ADD; ;;
+        "$SHOW_DELAY") return $SHOW_DELAY; ;;
+        "$SHOW_TABLES") return $SHOW_TABLES; ;;
+        "$DELAY_RESTORE") return $DELAY_RESTORE; ;;
+        "$FILTER_RESTORE") return $FILTER_RESTORE; ;;
         *) return 0;
          ;;
     esac
@@ -106,32 +113,75 @@ if [[ $RUNSEL -eq 0 ]]; then
 fi
 echo "RUNSEL = $SEL ($FLAVOR_DIR)" >&2;
 
-#################################
-###           Runner          ###
-#################################
+
 echo "sourcing filters.sh..."
 . "./filters.sh"
 
-# folder_exists "$BUILD_PATH";
-# if [[ $? -eq 0 ]]; then
 
-BACKUP_RESTORE_CMD=''
+#################################
+###       Save/Restore        ###
+#################################
+save_tc() {
+   local IF=$1; local LOC=$2;
+   folder_exists "$BACKUPS_DIR";
+   if ! [[ $? -eq 0 ]]; then echo "Backup loc DNE!"; exit 0; fi
+   file_exists "$LOC";
+   if [[ $? -eq 0 ]]; then echo "Backup exists"; return 0; fi
+   local CMD=(tcshow --device $IF);
+   ########################
+OUTPUT="$( bash <<EOF
+${CMD[@]};
+EOF
+)";
+   ########################
+   echo "$OUTPUT" > "$LOC";
+   chmod 755 $LOC;
+   chown $USER:$USER $LOC;
+}
+### save_tc
+
+restore_tc() {
+   local LOC=$1;
+   local CMD=(tcset -f $LOC);
+   ${CMD[@]};
+   local res=$?;
+   echo "restore result: $res ($LOC)";
+   return $res;
+}
+
+delete_tc() {
+   local IF=$1;
+   local CMD=(tcdel --device $IF);
+   ${CMD[@]};
+   return $?;
+}
+### delete_tc
+###########################################
+
+#################################
+###           Runner          ###
+#################################
+
 case "$RUNSEL" in
    "$DELAY_ADD" ) echo "Adding delay to $WIFI_IF" >&2;
-   BACKUP_RESTORE_CMD=(tcshow --device $WIFI_IF --device eth1 > $BACKUPS_DIR/tcconfig-$WIFI_IF.json);
-   echo "${BACKUP_RESTORE_CMD[@]}" >&2;
-   ${BACKUP_RESTORE_CMD[@]};
+   save_tc "$WIFI_IF" "$TC_CFG_PATH"
    DELAY_EN=yes;
    ;;
    "$FILTER_ADD" ) echo "Add filter" >&2;
-   CMD=(celery -A ota_app.celery shell);
    DROP_INBOUND_EN=yes;
    DROP_OUTBOUND_EN=yes;
    ;;
+   "$SHOW_DELAY" ) echo "Show delays" >&2;
+   local CMD=(tcshow --device $WIFI_IF);
+   ${CMD[@]}; exit 0;
+   ;;
+   "$SHOW_TABLES" ) echo "Show filters" >&2;
+   local CMD=(iptables -L);
+   ${CMD[@]}; exit 0;
+   ;;
    "$DELAY_RESTORE" ) echo "Restore delay settings to $WIFI_IF" >&2;
-   BACKUP_RESTORE_CMD=(tcset -f $BACKUPS_DIR/tcconfig-$WIFI_IF.json);
-   echo "${BACKUP_RESTORE_CMD[@]}" >&2;
-   ${BACKUP_RESTORE_CMD[@]};
+   # restore_tc "$TC_CFG_PATH";
+   delete_tc "$WIFI_IF";
    exit 0;
    ;;
    "$FILTER_RESTORE" ) echo "Restore filter settings to $WIFI_IF" >&2;
@@ -144,6 +194,17 @@ case "$RUNSEL" in
    ;;
 esac
 
+# Set delays
+if [[ "$DELAY_EN" == "yes" ]]; then
+   echo "Setting delays...";
+   clear_delay_rules "$WIFI_IF";
+   set_delay_rule "$WIFI_IF" "$DIR_OUTGOING" "$STAGING_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
+   set_delay_rule "$WIFI_IF" "$DIR_OUTGOING" "$DEPLOY_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
+   set_delay_rule "$WIFI_IF" "$DIR_INCOMING" "$LOCAL_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
+fi
+
+exit 0;
+
 # -w = 'wait for lock' || -I = 'insert'
 # iptables -w -I FORWARD -i ${WIFI_IFACE} -d ${GATEWAY%.*}.0/24 -m mac --mac-source 44:85:00:ef:ba:87 -m statistic --mode random --probability 0.25 -j DROP || die
 
@@ -151,14 +212,6 @@ esac
 if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
    format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_INSERT" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT";
    # iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
-fi
-
-# Set delays
-if [[ "$DELAY_EN" == "yes" ]]; then
-   clear_delay_rules "$WIFI_IFACE";
-   set_delay_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$STAGING_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
-   set_delay_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DEPLOY_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
-   set_delay_rule "$WIFI_IFACE" "$DIR_INCOMING" "$LOCAL_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
 fi
 
 #################################

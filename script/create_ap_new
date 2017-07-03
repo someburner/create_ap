@@ -102,13 +102,12 @@ echo "sourcing defaults.sh..."
 
 # source cleanup.sh:
 # Vars: None
-# Funcs: _clean_custom_iptables, clean_exit, die, cleanup, _cleanup
+# Funcs: clean_exit, die, cleanup, _cleanup
 echo "sourcing cleanup.sh..."
 . "$CREATE_AP_INC/cleanup.sh"
 
 # source utils.sh:
 # Vars: None
-# Funcs: _clean_custom_iptables, clean_exit, die, cleanup, _cleanup
 echo "sourcing utils.sh..."
 . "$CREATE_AP_INC/utils.sh"
 

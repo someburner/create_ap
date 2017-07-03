@@ -20,7 +20,7 @@ OUTB_DROP_MASK="192.168.0.0/16";
 ### Ports
 MQTT_PORT=1883
 
-WIFI_IF=ap0
+WIFI_IF="ap0"
 
 USER=jeffrey
 # TC_CFG_NAME="$WIFI_IF"
@@ -203,14 +203,12 @@ if [[ "$DELAY_EN" == "yes" ]]; then
    set_delay_rule "$WIFI_IF" "$DIR_INCOMING" "$LOCAL_MASK" "$MQTT_PORT" "$SIMPLE_DELAY" "$DELAY_TIME_MS";
 fi
 
-exit 0;
-
 # -w = 'wait for lock' || -I = 'insert'
 # iptables -w -I FORWARD -i ${WIFI_IFACE} -d ${GATEWAY%.*}.0/24 -m mac --mac-source 44:85:00:ef:ba:87 -m statistic --mode random --probability 0.25 -j DROP || die
 
 # insert drop
 if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-   format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_INSERT" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT";
+   format_drop_iptable_rule "$WIFI_IF" "$DIR_OUTGOING" "$DASH_INSERT" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT";
    # iptables -w -I FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT || die
 fi
 

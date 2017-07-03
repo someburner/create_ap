@@ -48,9 +48,9 @@ format_drop_iptable_rule () {
    esac
    ## ------------------------------- ##
    local RULE_CMD=( iptables -w $ACTION FORWARD -i $IFACE ${DIR_PARAMS[@]} -m statistic --mode random --probability $DROP_PCT -j DROP );
+   $("${RULE_CMD[@]}");
    local TMP_RULE=( "${RULE_CMD[@]}" );
-   # ${RULE_CMD[@]};
-   ${TMP_RULE[@]};
+   # ${TMP_RULE[@]};
 
    printf "\nFILTER:\n";
    printf "$PARAM_DBG";
@@ -152,9 +152,11 @@ set_delay_rule() {
 
 clean_custom_iptables() {
    # drop
-   if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-      format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_DELETE" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT" "$";
-   fi
+   iptables -X;
+   iptables -F;
+   # if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
+   #    format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_DELETE" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT" "$";
+   # fi
 }
 
 clear_delay_rules() {
@@ -166,9 +168,7 @@ clear_delay_rules() {
    DELAY_RULE_COUNT=0;
 }
 
-# clear_delay_rules "$WIFI_IFACE" "$DELAY_TYPE";
-# add_delay_rule "$WIFI_IFACE" "$DELAY_TYPE"
-#
+
 # tc qdisc add dev ap0 root netem delay 100ms          ## simple   (1)   100ms delay
 # tc qdisc change dev eth0 root netem delay 100ms 10ms 25% ## moderate (2) 100 ± 10ms
 # tc qdisc change dev eth0 root netem delay 100ms 20ms distribution normal ## (3) advanced

@@ -2,12 +2,17 @@ PREFIX=/usr
 MANDIR=$(PREFIX)/share/man
 BINDIR=$(PREFIX)/bin
 
+.PHONY: show_nat filters
+
 all:
 	@echo "Run 'make install' for installation."
 	@echo "Run 'make uninstall' for uninstallation."
 
 show_nat:
 	iptables -t nat -L --line-numbers -n
+
+filters:
+	cd filters && ./run.sh && cd ..
 
 ################################################################################
 ### By default this will create the following directories:

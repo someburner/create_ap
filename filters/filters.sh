@@ -149,6 +149,14 @@ set_delay_rule() {
    printf "\n";
 }
 
+
+clean_custom_iptables() {
+   # drop
+   if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
+      format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_DELETE" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT" "$";
+   fi
+}
+
 clear_delay_rules() {
    local IFACE=$1;
    echo 'clear_delay_rules...';

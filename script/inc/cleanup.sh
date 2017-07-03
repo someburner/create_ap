@@ -1,16 +1,5 @@
 #!/bin/bash
 
-_clean_custom_iptables() {
-   # delay
-   if [[ "$DELAY_EN" == "yes" ]]; then
-      clear_delay_rules "$WIFI_IFACE";
-   fi
-   # drop
-   if [[ "$DROP_OUTBOUND_EN" == "yes" ]]; then
-      format_drop_iptable_rule "$WIFI_IFACE" "$DIR_OUTGOING" "$DASH_DELETE" "$OUTB_DROP_MASK" "$MQTT_PORT" "$DROP_OUTBOUND_PCT" "$";
-   fi
-}
-
 _cleanup() {
    local PID x
 
@@ -70,7 +59,6 @@ _cleanup() {
 
    if [[ "$SHARE_METHOD" != "none" ]]; then
       if [[ "$SHARE_METHOD" == "nat" ]]; then
-         echo "\n\nTEST1234\n\n";
          iptables -w -t nat -D POSTROUTING -s ${GATEWAY%.*}.0/24 ! -o ${WIFI_IFACE} -j MASQUERADE || die
          iptables -w -D FORWARD -i ${WIFI_IFACE} -s ${GATEWAY%.*}.0/24 -j ACCEPT
          iptables -w -D FORWARD -i ${INTERNET_IFACE} -d ${GATEWAY%.*}.0/24 -j ACCEPT
@@ -162,10 +150,6 @@ die() {
 }
 
 clean_exit() {
-   echo " "
-   echo "Running Custom Clean-up";
-   _clean_custom_iptables
-   echo " "
    # send clean_exit signal to the main process
    [[ $BASHPID -ne $$ ]] && kill -USR1 $$
    # we don't need to call cleanup because it's traped on EXIT

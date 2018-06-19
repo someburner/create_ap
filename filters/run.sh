@@ -31,7 +31,7 @@ TC_CFG_PATH="$BACKUPS_DIR/$TC_CFG_NAME"
 ########   filtering rules   ########
 ## Drop Packets
 # DROP_DEST_IPMASK=$FLUMETECH_DEPLOY_MASK
-DROP_OUTBOUND_PCT=0.20
+DROP_OUTBOUND_PCT=0.30
 
 #####################################
 
@@ -41,10 +41,10 @@ DROP_OUTBOUND_PCT=0.20
 DELAY_TIME_MS=500
 
 # Delay variance for type 2
-DELAY_VAR_PCT=25
+DELAY_VAR_PCT=30
 
 # Delay normal dist for type 3
-DELAY_DISTRIBUTION=20
+DELAY_DISTRIBUTION=30
 #####################################
 
 
